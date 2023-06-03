@@ -2,13 +2,8 @@ import { readFile } from 'fs/promises';
 import { createServer } from 'http';
 import escapeHtml from 'escape-html';
 
-
-createServer(async (req, res) => {
-  const author = "Jae Doe";
-  const postContent = await readFile("./posts/hello-world.txt", "utf-8");
-
-  sendHTML(
-    res,
+function BlogPostPage({ postContent, children }) {
+  return (
     <html>
       <head>
         <title>My Blog</title>
@@ -21,14 +16,30 @@ createServer(async (req, res) => {
         <article>
           {postContent}
         </article>
-        <footer>
-          <hr />
-          <p>
-            <i>(c) ${author}, ${new Date().getFullYear()}</i>
-          </p>
-        </footer>
+        {children}
       </body>
     </html>
+  )
+}
+
+function Footer({ author }) {
+  return (
+    <footer>
+      <hr />
+      <p>
+        <i>(c) ${author}, ${new Date().getFullYear()}</i>
+      </p>
+    </footer>
+  )
+}
+
+createServer(async (req, res) => {
+  const author = "Jae Doe";
+  const postContent = await readFile("./posts/hello-world.txt", "utf-8");
+
+  sendHTML(
+    res,
+    <BlogPostPage postContent={postContent}><Footer author={author} /></BlogPostPage>
   )
 }).listen(8080);
 
@@ -48,6 +59,10 @@ function renderJSXToHTML(jsx) {
   } else if (typeof jsx === 'object') {
     // vdom
     if (jsx.$$typeof === Symbol.for('react.element')) {
+      if (typeof jsx.type === 'function') {
+        const Component = jsx.type;
+        return renderJSXToHTML(Component(jsx.props));
+      }
       // tag
       let html = `<${jsx.type}`;
       // props
