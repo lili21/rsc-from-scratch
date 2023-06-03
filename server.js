@@ -1,8 +1,10 @@
-import { readFile } from 'fs/promises';
+import { readFile, readdir } from 'fs/promises';
 import { createServer } from 'http';
 import escapeHtml from 'escape-html';
 
-function BlogPostPage({ postContent, children }) {
+function BlogLayout({ children }) {
+  const author = "Jae Doe";
+
   return (
     <html>
       <head>
@@ -13,12 +15,43 @@ function BlogPostPage({ postContent, children }) {
           <a href="/">Home</a>
           <hr />
         </nav>
-        <article>
-          {postContent}
-        </article>
-        {children}
+        <main>
+          {children}
+        </main>
+        <Footer author={author} />
       </body>
     </html>
+  )
+}
+
+function BlogIndexPage({ postSlugs, postContents }) {
+  return (
+    <section>
+      <h1>Welcome to my blog</h1>
+      <div>
+        {
+          postSlugs.map((postSlug, index) => (
+            <section key={postSlug}>
+              <h2>
+                <a href={`/${postSlug}`}>{postSlug}</a>
+              </h2>
+              <article>{postContents[index]}</article>
+            </section>
+          ))
+        }
+      </div>
+    </section>
+  )
+}
+
+function BlogPostPage({ postSlug, postContent }) {
+  return (
+    <section>
+      <h2>
+        <a href={`/${postSlug}`}>{postSlug}</a>
+      </h2>
+      <article>{postContent}</article>
+    </section>
   )
 }
 
@@ -34,13 +67,30 @@ function Footer({ author }) {
 }
 
 createServer(async (req, res) => {
-  const author = "Jae Doe";
-  const postContent = await readFile("./posts/hello-world.txt", "utf-8");
+  // const author = "Jae Doe";
+  // const postContent = await readFile("./posts/hello-world.txt", "utf-8");
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  let page;
+  if (url.pathname === '/') {
+    const postFiles = await readdir('./posts');
+    const postSlugs = postFiles.map(file => file.slice(0, file.lastIndexOf('.')));
+    const postContents = await Promise.all(
+      postSlugs.map(postSlug => readFile(`./posts/${postSlug}.txt`, 'utf8'))
+    )
+    page = <BlogIndexPage postSlugs={postSlugs} postContents={postContents} />
+  } else if (!url.pathname.includes('.')) {
+    const postSlug = url.pathname.slice(1);
+    const postContent = await readFile(`./posts/${postSlug}.txt`, 'utf8');
+    page = <BlogPostPage postSlug={postSlug} postContent={postContent} />
+  }
 
-  sendHTML(
-    res,
-    <BlogPostPage postContent={postContent}><Footer author={author} /></BlogPostPage>
-  )
+  if (page) {
+    sendHTML(res, <BlogLayout>{page}</BlogLayout>)
+  } else {
+    res.writeHead(404);
+    res.end();
+  }
+
 }).listen(8080);
 
 function sendHTML(res, jsx) {
