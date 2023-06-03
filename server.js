@@ -24,18 +24,18 @@ function BlogLayout({ children }) {
   )
 }
 
-function BlogIndexPage({ postSlugs, postContents }) {
+function BlogIndexPage({ postSlugs }) {
   return (
     <section>
       <h1>Welcome to my blog</h1>
       <div>
         {
-          postSlugs.map((postSlug, index) => (
+          postSlugs.map((postSlug) => (
             <section key={postSlug}>
               <h2>
                 <a href={`/${postSlug}`}>{postSlug}</a>
               </h2>
-              <article>{postContents[index]}</article>
+              <Post postSlug={postSlug} />
             </section>
           ))
         }
@@ -44,15 +44,20 @@ function BlogIndexPage({ postSlugs, postContents }) {
   )
 }
 
-function BlogPostPage({ postSlug, postContent }) {
+function BlogPostPage({ postSlug }) {
   return (
     <section>
       <h2>
         <a href={`/${postSlug}`}>{postSlug}</a>
       </h2>
-      <article>{postContent}</article>
+      <Post postSlug={postSlug} />
     </section>
   )
+}
+
+async function Post({ postSlug }) {
+  const postContent = await readFile(`./posts/${postSlug}.txt`, 'utf8');
+  return <article>{postContent}</article>
 }
 
 function Footer({ author }) {
@@ -74,14 +79,10 @@ createServer(async (req, res) => {
   if (url.pathname === '/') {
     const postFiles = await readdir('./posts');
     const postSlugs = postFiles.map(file => file.slice(0, file.lastIndexOf('.')));
-    const postContents = await Promise.all(
-      postSlugs.map(postSlug => readFile(`./posts/${postSlug}.txt`, 'utf8'))
-    )
-    page = <BlogIndexPage postSlugs={postSlugs} postContents={postContents} />
+    page = <BlogIndexPage postSlugs={postSlugs} />
   } else if (!url.pathname.includes('.')) {
     const postSlug = url.pathname.slice(1);
-    const postContent = await readFile(`./posts/${postSlug}.txt`, 'utf8');
-    page = <BlogPostPage postSlug={postSlug} postContent={postContent} />
+    page = <BlogPostPage postSlug={postSlug} />
   }
 
   if (page) {
@@ -93,25 +94,25 @@ createServer(async (req, res) => {
 
 }).listen(8080);
 
-function sendHTML(res, jsx) {
+async function sendHTML(res, jsx) {
   res.writeHead(200, { 'Content-Type': 'text/html' });
-  res.end(renderJSXToHTML(jsx));
+  res.end(await renderJSXToHTML(jsx));
 }
 
-function renderJSXToHTML(jsx) {
+async function renderJSXToHTML(jsx) {
   // let html = '';
   if (typeof jsx === 'string' || typeof jsx === 'number') {
     return escapeHtml(jsx);
   } else if (jsx === null || typeof jsx === 'boolean') {
     return '';
   } else if (Array.isArray(jsx)) {
-    return jsx.map(child => renderJSXToHTML(child)).join('');
+    const result = await Promise.all(jsx.map(async child => await renderJSXToHTML(child)));
+    return result.join('');
   } else if (typeof jsx === 'object') {
     // vdom
     if (jsx.$$typeof === Symbol.for('react.element')) {
       if (typeof jsx.type === 'function') {
-        const Component = jsx.type;
-        return renderJSXToHTML(Component(jsx.props));
+        return renderJSXToHTML(await jsx.type(jsx.props));
       }
       // tag
       let html = `<${jsx.type}`;
@@ -122,7 +123,7 @@ function renderJSXToHTML(jsx) {
       html += `>`;
       // children
       if (jsx.props.children) {
-        html += renderJSXToHTML(jsx.props.children);
+        html += await renderJSXToHTML(jsx.props.children);
       }
       html += `</${jsx.type}>`;
       return html;
